@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ChatGPT Clone
 
-## Getting Started
+A local ChatGPT-like web app that runs on your machine using your OpenAI API key. Built with Next.js, TypeScript, Tailwind CSS, and SQLite.
 
-First, run the development server:
+## Features
+
+- **Streaming responses** - Real-time token-by-token display
+- **Chat history** - All conversations persisted in a local SQLite database
+- **Model selector** - Dynamically fetches all available models from your API key
+- **Markdown rendering** - Code blocks with syntax highlighting and copy button
+- **Image upload** - Attach images for vision-capable models (e.g. GPT-4o)
+- **Auto-generated titles** - Chat titled from first message via GPT-4o-mini
+- **System prompt** - Optional per-chat system prompt
+- **Responsive** - Works on mobile with collapsible sidebar
+- **Keyboard shortcuts** - Enter to send, Cmd/Ctrl+Shift+N for new chat
+
+## Quick Setup
 
 ```bash
+# Clone the repo
+git clone https://github.com/sbarilov/chatgpt.git
+cd chatgpt
+
+# Run the setup script
+chmod +x setup.sh
+./setup.sh
+
+# Start the app
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Manual Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Install dependencies**
 
-## Learn More
+   ```bash
+   npm install
+   ```
 
-To learn more about Next.js, take a look at the following resources:
+2. **Create `.env.local`** in the project root:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   ```
+   OPENAI_API_KEY=sk-your-key-here
+   ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. **Create data directories**
 
-## Deploy on Vercel
+   ```bash
+   mkdir -p data/uploads
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4. **Start the dev server**
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   ```bash
+   npm run dev
+   ```
+
+The SQLite database (`data/chatgpt.db`) is auto-created on first request. No manual DB setup needed.
+
+## Tech Stack
+
+- **Next.js 16** (App Router, TypeScript)
+- **Tailwind CSS** (dark mode)
+- **better-sqlite3** (local persistence)
+- **openai** SDK (streaming + model listing)
+- **react-markdown** + **react-syntax-highlighter** (rendering)
+
+## Project Structure
+
+```
+app/
+  api/          # API routes (models, chat, chats CRUD, upload)
+  components/   # React components (Sidebar, ChatArea, MessageBubble, etc.)
+lib/
+  db.ts         # SQLite connection, schema, CRUD helpers
+  context.tsx   # React Context + state management
+  types.ts      # TypeScript interfaces
+hooks/
+  useModels.ts  # Fetch available models
+data/           # Auto-created, gitignored
+  chatgpt.db    # SQLite database
+  uploads/      # Uploaded images
+```
