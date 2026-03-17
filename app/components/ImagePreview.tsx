@@ -13,11 +13,17 @@ export default function ImagePreview({ images, onRemove, small }: ImagePreviewPr
     <div className="flex gap-2 flex-wrap">
       {images.map((img, i) => (
         <div key={i} className="relative group">
-          <img
-            src={`/api/uploads/${img.replace("data/uploads/", "")}`}
-            alt="upload"
-            className={`rounded-lg object-cover ${small ? "w-16 h-16" : "w-24 h-24"}`}
-          />
+          {img.toLowerCase().endsWith(".pdf") ? (
+            <div className={`rounded-lg bg-gray-700 flex items-center justify-center ${small ? "w-16 h-16" : "w-24 h-24"}`}>
+              <span className="text-red-400 text-xs font-bold">PDF</span>
+            </div>
+          ) : (
+            <img
+              src={`/api/uploads/${img.replace("data/uploads/", "")}`}
+              alt="upload"
+              className={`rounded-lg object-cover ${small ? "w-16 h-16" : "w-24 h-24"}`}
+            />
+          )}
           {onRemove && (
             <button
               onClick={() => onRemove(i)}

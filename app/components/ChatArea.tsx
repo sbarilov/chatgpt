@@ -12,14 +12,22 @@ export default function ChatArea() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const prevMessageCountRef = useRef(0);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const messageCount = state.activeChat?.messages.length ?? 0;
+
   useEffect(() => {
-    scrollToBottom();
-  }, [state.activeChat?.messages]);
+    // Only scroll when a new message is added (user sent or new assistant placeholder)
+    // Don't scroll on streaming content updates to existing messages
+    if (messageCount > prevMessageCountRef.current) {
+      scrollToBottom();
+    }
+    prevMessageCountRef.current = messageCount;
+  }, [messageCount]);
 
   const handleScroll = () => {
     if (!containerRef.current) return;

@@ -21,11 +21,21 @@ export async function POST(req: Request) {
             const data = fs.readFileSync(fullPath);
             const base64 = data.toString("base64");
             const ext = path.extname(imgPath).slice(1).toLowerCase();
-            const mime = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
-            contentParts.push({
-              type: "image_url",
-              image_url: { url: `data:${mime};base64,${base64}` },
-            });
+            if (ext === "pdf") {
+              contentParts.push({
+                type: "file",
+                file: {
+                  filename: path.basename(imgPath),
+                  file_data: `data:application/pdf;base64,${base64}`,
+                },
+              } as unknown as OpenAI.ChatCompletionContentPart);
+            } else {
+              const mime = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+              contentParts.push({
+                type: "image_url",
+                image_url: { url: `data:${mime};base64,${base64}` },
+              });
+            }
           }
         }
         return { role: m.role, content: contentParts };

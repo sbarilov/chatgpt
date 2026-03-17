@@ -18,6 +18,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ path: s
     jpeg: "image/jpeg",
     gif: "image/gif",
     webp: "image/webp",
+    pdf: "application/pdf",
   };
   const contentType = mimeMap[ext] || "application/octet-stream";
 
