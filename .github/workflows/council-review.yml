@@ -1,26 +1,24 @@
+# Drop this file into any repo at .github/workflows/council-review.yml
+# It triggers when someone comments /council-review on a PR
+# or when the 'council-reviewer' team/user is added as a reviewer.
+#
+# Required org-level or repo-level secrets:
+#   OPENAI_API_KEY
+# Optional secrets:
+#   JIRA_API_TOKEN, JIRA_BASE_URL, JIRA_USER_EMAIL
+
 name: Council PR Review
 
 on:
-  # Trigger when a specific reviewer is requested
   pull_request:
     types: [review_requested]
-
-  # Trigger via /council-review comment
   issue_comment:
     types: [created]
-
-env:
-  # The reviewer name that triggers the review (team or user)
-  # Change this to match your org's bot account or team slug
-  COUNCIL_REVIEWER: council-reviewer
 
 jobs:
   review:
     runs-on: ubuntu-latest
 
-    # Run if:
-    # 1. A matching reviewer was requested on a non-draft PR, OR
-    # 2. Someone commented /council-review on a PR
     if: >-
       (
         github.event_name == 'pull_request' &&
@@ -54,20 +52,25 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout
+      - name: Checkout reviewer tool
         uses: actions/checkout@v4
+        with:
+          repository: sbarilov/chatgpt
+          path: reviewer-tool
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
+          cache-dependency-path: reviewer-tool/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: cd reviewer-tool && npm ci
 
       - name: Run Council PR Review
         run: |
+          cd reviewer-tool
           npx tsx tools/pr-reviewer/cli.ts \
             --repo ${{ github.repository }} \
             --pr ${{ steps.pr.outputs.number }} \

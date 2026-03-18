@@ -1,0 +1,59 @@
+name: Council PR Review (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      pr_number:
+        required: true
+        type: number
+      repository:
+        required: true
+        type: string
+      models:
+        required: false
+        type: string
+        default: "gpt-5.4,gpt-5.3-chat-latest,o3,gpt-5.2,gpt-5.4-mini"
+    secrets:
+      OPENAI_API_KEY:
+        required: true
+      JIRA_API_TOKEN:
+        required: false
+      JIRA_BASE_URL:
+        required: false
+      JIRA_USER_EMAIL:
+        required: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout reviewer tool
+        uses: actions/checkout@v4
+        with:
+          repository: sbarilov/chatgpt
+          path: reviewer-tool
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: reviewer-tool/package-lock.json
+
+      - name: Install dependencies
+        run: cd reviewer-tool && npm ci
+
+      - name: Run Council PR Review
+        run: |
+          cd reviewer-tool
+          npx tsx tools/pr-reviewer/cli.ts \
+            --repo ${{ inputs.repository }} \
+            --pr ${{ inputs.pr_number }} \
+            --models ${{ inputs.models }} \
+            --post
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
