@@ -15,8 +15,9 @@ export interface Chat {
   systemPrompt: string;
   mode: "single" | "council";
   councilModels?: string[];
-  councilStyle?: "synthesis" | "roundtable";
+  councilStyle?: "synthesis" | "roundtable" | "sequential";
   councilRounds?: number;
+  councilRoles?: Record<string, string>; // model -> role
   messages: Message[];
   createdAt: string;
   updatedAt: string;

@@ -4,33 +4,49 @@ import { useState, useRef, useEffect } from "react";
 import { useModels } from "@/hooks/useModels";
 import { useChatContext } from "@/lib/context";
 
+const PRESET_ROLES = [
+  { id: "analytical", label: "Analytical Thinker", description: "Focuses on logic, evidence, and structured reasoning" },
+  { id: "creative", label: "Creative Thinker", description: "Explores unconventional ideas and novel perspectives" },
+  { id: "devils_advocate", label: "Devil's Advocate", description: "Challenges assumptions and argues the opposing view" },
+  { id: "practical", label: "Practical Realist", description: "Prioritizes feasibility, trade-offs, and real-world constraints" },
+  { id: "detail", label: "Detail Reviewer", description: "Catches edge cases, errors, and missing nuances" },
+];
+
+const STYLE_INFO: Record<string, { label: string; description: string }> = {
+  synthesis: { label: "Synthesis", description: "All models answer in parallel, then a moderator synthesizes into one response. Fastest option." },
+  roundtable: { label: "Roundtable", description: "Multiple rounds where models see and refine each other's answers before synthesis. Deeper consensus." },
+  sequential: { label: "Sequential", description: "Models take turns one by one, each responding to all previous answers. Most like a real discussion." },
+};
+
 export default function ModelSelector() {
   const { models, loading } = useModels();
-  const { state, updateModel, createNewChat, loadChat, loadChats } = useChatContext();
+  const { state, updateModel, createNewChat } = useChatContext();
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  // Council creation state (only used when switching to council for a new chat)
   const [pendingMode, setPendingMode] = useState<"single" | "council">("single");
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
-  const [councilStyle, setCouncilStyle] = useState<"synthesis" | "roundtable">("synthesis");
+  const [councilStyle, setCouncilStyle] = useState<"synthesis" | "roundtable" | "sequential">("synthesis");
   const [councilRounds, setCouncilRounds] = useState<number>(2);
+  const [roleAssignments, setRoleAssignments] = useState<Record<string, string>>({});
+  const [customRoleInput, setCustomRoleInput] = useState("");
+  const [showRoles, setShowRoles] = useState(false);
+  const [hoveredStyle, setHoveredStyle] = useState<string | null>(null);
 
   const activeChat = state.activeChat;
   const isCouncil = activeChat?.mode === "council";
   const currentModel = activeChat?.model || "gpt-4.5-pro";
 
-  // Sync pending state when panel opens
   useEffect(() => {
     if (open && activeChat) {
       setPendingMode(activeChat.mode);
       setSelectedModels(activeChat.councilModels || []);
       setCouncilStyle(activeChat.councilStyle || "synthesis");
       setCouncilRounds(activeChat.councilRounds || 2);
+      setRoleAssignments(activeChat.councilRoles || {});
     }
   }, [open, activeChat]);
 
-  // Close panel on outside click
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
@@ -42,6 +58,17 @@ export default function ModelSelector() {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
+  // Clean up role assignments when models are deselected
+  useEffect(() => {
+    setRoleAssignments((prev) => {
+      const cleaned: Record<string, string> = {};
+      for (const m of selectedModels) {
+        if (prev[m]) cleaned[m] = prev[m];
+      }
+      return cleaned;
+    });
+  }, [selectedModels]);
+
   const openaiModels = models.filter((m) => !m.startsWith("gemini"));
   const geminiModels = models.filter((m) => m.startsWith("gemini"));
 
@@ -51,14 +78,38 @@ export default function ModelSelector() {
     );
   };
 
+  const assignRole = (model: string, role: string) => {
+    setRoleAssignments((prev) => {
+      if (!role) {
+        const next = { ...prev };
+        delete next[model];
+        return next;
+      }
+      return { ...prev, [model]: role };
+    });
+  };
+
+  const addCustomRole = () => {
+    const role = customRoleInput.trim();
+    if (!role) return;
+    // Assign to first model without a role
+    const unassigned = selectedModels.find((m) => !roleAssignments[m]);
+    if (unassigned) {
+      assignRole(unassigned, role);
+    }
+    setCustomRoleInput("");
+  };
+
   const handleCreateCouncil = async () => {
     if (selectedModels.length < 2) return;
+    const roles = Object.keys(roleAssignments).length > 0 ? roleAssignments : undefined;
     await createNewChat({
       model: selectedModels[0],
       mode: "council",
       councilModels: selectedModels,
       councilStyle,
       councilRounds,
+      councilRoles: roles,
     });
     setOpen(false);
   };
@@ -84,7 +135,7 @@ export default function ModelSelector() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-80 bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 w-96 bg-[#1e1e1e] border border-gray-700 rounded-xl shadow-2xl z-50 overflow-hidden">
           {/* Mode toggle */}
           <div className="flex border-b border-gray-700">
             <button
@@ -105,9 +156,8 @@ export default function ModelSelector() {
             </button>
           </div>
 
-          <div className="max-h-80 overflow-y-auto">
+          <div className="max-h-[28rem] overflow-y-auto">
             {pendingMode === "single" ? (
-              /* Single mode: radio list */
               <div className="p-2">
                 {models.map((m) => (
                   <button
@@ -127,9 +177,9 @@ export default function ModelSelector() {
                 ))}
               </div>
             ) : (
-              /* Council mode: multi-select + config */
               <div className="p-3 space-y-3">
-                <p className="text-xs text-gray-400">Select 2-4 models for the council:</p>
+                {/* Model selection */}
+                <p className="text-xs text-gray-400">Select 2-4 models:</p>
 
                 {openaiModels.length > 0 && (
                   <div>
@@ -167,27 +217,28 @@ export default function ModelSelector() {
                   </div>
                 )}
 
-                {/* Style toggle */}
+                {/* Style selector with tooltips */}
                 <div>
                   <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Style</p>
                   <div className="flex rounded-lg overflow-hidden border border-gray-600">
-                    <button
-                      onClick={() => setCouncilStyle("synthesis")}
-                      className={`flex-1 py-1.5 text-xs font-medium ${
-                        councilStyle === "synthesis" ? "bg-blue-600 text-white" : "bg-[#2a2a2a] text-gray-400"
-                      }`}
-                    >
-                      Synthesis
-                    </button>
-                    <button
-                      onClick={() => setCouncilStyle("roundtable")}
-                      className={`flex-1 py-1.5 text-xs font-medium ${
-                        councilStyle === "roundtable" ? "bg-blue-600 text-white" : "bg-[#2a2a2a] text-gray-400"
-                      }`}
-                    >
-                      Roundtable
-                    </button>
+                    {(["synthesis", "roundtable", "sequential"] as const).map((style) => (
+                      <button
+                        key={style}
+                        onClick={() => setCouncilStyle(style)}
+                        onMouseEnter={() => setHoveredStyle(style)}
+                        onMouseLeave={() => setHoveredStyle(null)}
+                        className={`flex-1 py-1.5 text-xs font-medium transition-colors ${
+                          councilStyle === style ? "bg-blue-600 text-white" : "bg-[#2a2a2a] text-gray-400 hover:text-gray-200"
+                        }`}
+                      >
+                        {STYLE_INFO[style].label}
+                      </button>
+                    ))}
                   </div>
+                  {/* Style description */}
+                  <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                    {STYLE_INFO[hoveredStyle || councilStyle].description}
+                  </p>
                 </div>
 
                 {/* Rounds (only for roundtable) */}
@@ -207,6 +258,100 @@ export default function ModelSelector() {
                         </button>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Role assignment (collapsible) */}
+                {selectedModels.length >= 2 && (
+                  <div className="border border-gray-700 rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setShowRoles(!showRoles)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className={`w-3.5 h-3.5 transition-transform ${showRoles ? "rotate-90" : ""}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <span className="font-medium uppercase tracking-wider">Assign Roles</span>
+                      {Object.keys(roleAssignments).length > 0 && (
+                        <span className="text-blue-400">({Object.keys(roleAssignments).length} assigned)</span>
+                      )}
+                      <span className="ml-auto text-gray-600 font-normal normal-case tracking-normal">optional</span>
+                    </button>
+
+                    {showRoles && (
+                      <div className="px-3 pb-3 space-y-3 border-t border-gray-700 pt-3">
+                        <p className="text-xs text-gray-500">
+                          Give each model a perspective to bring to the discussion.
+                        </p>
+
+                        {/* Per-model role assignment */}
+                        {selectedModels.map((model) => (
+                          <div key={model} className="space-y-1">
+                            <p className="text-xs font-medium text-gray-300 truncate">{model}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {PRESET_ROLES.map((role) => {
+                                const isAssigned = roleAssignments[model] === role.label;
+                                const isTakenByOther = !isAssigned && Object.values(roleAssignments).includes(role.label);
+                                return (
+                                  <button
+                                    key={role.id}
+                                    onClick={() => assignRole(model, isAssigned ? "" : role.label)}
+                                    disabled={isTakenByOther}
+                                    title={role.description}
+                                    className={`text-[10px] px-2 py-1 rounded-full border transition-colors ${
+                                      isAssigned
+                                        ? "bg-blue-600/20 border-blue-500 text-blue-300"
+                                        : isTakenByOther
+                                        ? "border-gray-700 text-gray-600 cursor-not-allowed"
+                                        : "border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-300"
+                                    }`}
+                                  >
+                                    {role.label}
+                                  </button>
+                                );
+                              })}
+                              {/* Show custom role if assigned and not a preset */}
+                              {roleAssignments[model] && !PRESET_ROLES.some((r) => r.label === roleAssignments[model]) && (
+                                <span className="text-[10px] px-2 py-1 rounded-full border bg-purple-600/20 border-purple-500 text-purple-300 flex items-center gap-1">
+                                  {roleAssignments[model]}
+                                  <button onClick={() => assignRole(model, "")} className="hover:text-white">&times;</button>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Custom role input */}
+                        <div className="flex gap-1.5 items-center">
+                          <input
+                            type="text"
+                            value={customRoleInput}
+                            onChange={(e) => setCustomRoleInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && addCustomRole()}
+                            placeholder="Custom role..."
+                            className="flex-1 text-xs bg-[#2a2a2a] text-gray-200 rounded px-2 py-1.5 border border-gray-600 focus:outline-none focus:border-blue-500 placeholder-gray-500"
+                          />
+                          <button
+                            onClick={addCustomRole}
+                            disabled={!customRoleInput.trim() || !selectedModels.some((m) => !roleAssignments[m])}
+                            className="text-xs px-2 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:opacity-50 text-white rounded transition-colors"
+                          >
+                            Add
+                          </button>
+                        </div>
+                        {selectedModels.some((m) => !roleAssignments[m]) && customRoleInput.trim() && (
+                          <p className="text-[10px] text-gray-500">
+                            Will be assigned to: {selectedModels.find((m) => !roleAssignments[m])}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 

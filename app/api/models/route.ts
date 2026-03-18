@@ -17,7 +17,7 @@ export async function GET() {
     const models = list.data
       .map((m) => m.id)
       .filter((id) => id.startsWith("gpt-") || id.startsWith("o") || id.startsWith("chatgpt-"))
-      .filter((id) => !id.includes("instruct") && !id.includes("realtime") && !id.includes("audio") && !id.includes("transcribe") && !id.includes("tts") && !id.includes("dall-e") && !id.includes("whisper") && !id.includes("embedding") && !id.includes("gpt-5-pro"))
+      .filter((id) => !id.includes("instruct") && !id.includes("realtime") && !id.includes("audio") && !id.includes("transcribe") && !id.includes("tts") && !id.includes("dall-e") && !id.includes("whisper") && !id.includes("embedding") && !id.includes("gpt-5-pro") && id !== "o3-pro")
       .sort();
 
     // Append Gemini models if API key is configured

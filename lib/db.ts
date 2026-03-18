@@ -47,6 +47,7 @@ function getDb(): Database.Database {
       "ALTER TABLE chats ADD COLUMN council_rounds INTEGER DEFAULT 2",
       "ALTER TABLE messages ADD COLUMN model TEXT",
       "ALTER TABLE messages ADD COLUMN council_responses TEXT",
+      "ALTER TABLE chats ADD COLUMN council_roles TEXT",
     ];
     for (const stmt of alterStatements) {
       try {
@@ -77,7 +78,7 @@ export function getChat(id: string): Chat | null {
     .prepare("SELECT * FROM chats WHERE id = ?")
     .get(id) as {
       id: string; title: string; model: string; system_prompt: string;
-      mode: string; council_models: string | null; council_style: string | null; council_rounds: number | null;
+      mode: string; council_models: string | null; council_style: string | null; council_rounds: number | null; council_roles: string | null;
       created_at: string; updated_at: string;
     } | undefined;
   if (!row) return null;
@@ -111,8 +112,9 @@ export function getChat(id: string): Chat | null {
     systemPrompt: row.system_prompt,
     mode: (row.mode || "single") as "single" | "council",
     councilModels: row.council_models ? JSON.parse(row.council_models) : undefined,
-    councilStyle: row.council_style as "synthesis" | "roundtable" | undefined,
+    councilStyle: row.council_style as "synthesis" | "roundtable" | "sequential" | undefined,
     councilRounds: row.council_rounds ?? undefined,
+    councilRoles: row.council_roles ? JSON.parse(row.council_roles) : undefined,
     messages,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -124,8 +126,9 @@ interface CreateChatOptions {
   systemPrompt?: string;
   mode?: "single" | "council";
   councilModels?: string[];
-  councilStyle?: "synthesis" | "roundtable";
+  councilStyle?: "synthesis" | "roundtable" | "sequential";
   councilRounds?: number;
+  councilRoles?: Record<string, string>;
 }
 
 export function createChat(modelOrOptions: string | CreateChatOptions, systemPrompt: string = ""): Chat {
@@ -137,11 +140,12 @@ export function createChat(modelOrOptions: string | CreateChatOptions, systemPro
   const now = new Date().toISOString();
   const mode = opts.mode || "single";
   getDb()
-    .prepare("INSERT INTO chats (id, title, model, system_prompt, mode, council_models, council_style, council_rounds, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .prepare("INSERT INTO chats (id, title, model, system_prompt, mode, council_models, council_style, council_rounds, council_roles, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
     .run(id, "New Chat", opts.model, opts.systemPrompt || "", mode,
       opts.councilModels ? JSON.stringify(opts.councilModels) : null,
       opts.councilStyle || null,
       opts.councilRounds ?? (mode === "council" ? 2 : null),
+      opts.councilRoles ? JSON.stringify(opts.councilRoles) : null,
       now, now);
   return {
     id, title: "New Chat", model: opts.model,
@@ -150,6 +154,7 @@ export function createChat(modelOrOptions: string | CreateChatOptions, systemPro
     councilModels: opts.councilModels,
     councilStyle: opts.councilStyle,
     councilRounds: opts.councilRounds ?? (mode === "council" ? 2 : undefined),
+    councilRoles: opts.councilRoles,
     messages: [], createdAt: now, updatedAt: now,
   };
 }
@@ -157,13 +162,14 @@ export function createChat(modelOrOptions: string | CreateChatOptions, systemPro
 export function updateChat(id: string, updates: {
   title?: string; model?: string; systemPrompt?: string;
   mode?: "single" | "council"; councilModels?: string[];
-  councilStyle?: "synthesis" | "roundtable"; councilRounds?: number;
+  councilStyle?: "synthesis" | "roundtable" | "sequential"; councilRounds?: number;
+  councilRoles?: Record<string, string>;
 }): void {
   const now = new Date().toISOString();
   const chat = getChat(id);
   if (!chat) return;
   getDb()
-    .prepare("UPDATE chats SET title = ?, model = ?, system_prompt = ?, mode = ?, council_models = ?, council_style = ?, council_rounds = ?, updated_at = ? WHERE id = ?")
+    .prepare("UPDATE chats SET title = ?, model = ?, system_prompt = ?, mode = ?, council_models = ?, council_style = ?, council_rounds = ?, council_roles = ?, updated_at = ? WHERE id = ?")
     .run(
       updates.title ?? chat.title,
       updates.model ?? chat.model,
@@ -172,6 +178,7 @@ export function updateChat(id: string, updates: {
       updates.councilModels ? JSON.stringify(updates.councilModels) : (chat.councilModels ? JSON.stringify(chat.councilModels) : null),
       updates.councilStyle ?? chat.councilStyle ?? null,
       updates.councilRounds ?? chat.councilRounds ?? null,
+      updates.councilRoles ? JSON.stringify(updates.councilRoles) : (chat.councilRoles ? JSON.stringify(chat.councilRoles) : null),
       now, id
     );
 }

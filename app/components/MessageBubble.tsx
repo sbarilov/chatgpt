@@ -14,6 +14,13 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
   const isCouncil = message.model === "council" || (message.councilResponses && message.councilResponses.length > 0);
   const [showResponses, setShowResponses] = useState(false);
 
+  // Normalize old flat format [{model,content}] to new round format [{round,responses}]
+  const councilRounds = message.councilResponses?.map((rd: any) =>
+    rd.responses ? rd : { round: 1, responses: [rd] }
+  );
+  // Sequential mode: each round has exactly 1 response
+  const isSequential = councilRounds && councilRounds.length > 1 && councilRounds.every((rd: any) => rd.responses.length === 1);
+
   return (
     <div className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}>
       {!isUser && (
@@ -58,7 +65,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
             </div>
 
             {/* Collapsible individual responses */}
-            {message.councilResponses && message.councilResponses.length > 0 && (
+            {councilRounds && councilRounds.length > 0 && (
               <div className="mt-3 border-t border-gray-600 pt-2">
                 <button
                   onClick={() => setShowResponses(!showResponses)}
@@ -73,19 +80,19 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  View individual responses ({message.councilResponses.length} {message.councilResponses.length === 1 ? "round" : "rounds"})
+                  View individual responses ({councilRounds.length} {isSequential ? (councilRounds.length === 1 ? "turn" : "turns") : (councilRounds.length === 1 ? "round" : "rounds")})
                 </button>
                 {showResponses && (
                   <div className="mt-2 space-y-3">
-                    {message.councilResponses.map((rd) => (
+                    {councilRounds.map((rd: any) => (
                       <div key={rd.round}>
-                        {message.councilResponses!.length > 1 && (
+                        {councilRounds.length > 1 && (
                           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-                            Round {rd.round}
+                            {isSequential ? "Turn" : "Round"} {rd.round}
                           </div>
                         )}
                         <div className="space-y-2">
-                          {rd.responses.map((r, i) => (
+                          {rd.responses.map((r: any, i: number) => (
                             <div key={i} className="bg-[#1a1a1a] rounded-lg p-3 border border-gray-700">
                               <div className="text-xs font-medium text-gray-400 mb-1.5">
                                 {r.model}

@@ -95,8 +95,9 @@ interface CreateChatOptions {
   model: string;
   mode?: "single" | "council";
   councilModels?: string[];
-  councilStyle?: "synthesis" | "roundtable";
+  councilStyle?: "synthesis" | "roundtable" | "sequential";
   councilRounds?: number;
+  councilRoles?: Record<string, string>;
 }
 
 interface ChatContextType {
@@ -227,6 +228,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             messages: apiMessages,
             councilStyle,
             councilRounds,
+            councilRoles: state.activeChat.councilRoles,
           }),
           signal: controller.signal,
         });
