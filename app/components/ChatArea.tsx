@@ -8,11 +8,13 @@ import ModelSelector from "./ModelSelector";
 import SystemPromptEditor from "./SystemPromptEditor";
 
 export default function ChatArea() {
-  const { state, dispatch, createNewChat } = useChatContext();
+  const { state, dispatch, createNewChat, cancelCouncil } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const prevMessageCountRef = useRef(0);
+
+  const isCouncil = state.activeChat?.mode === "council";
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -21,8 +23,6 @@ export default function ChatArea() {
   const messageCount = state.activeChat?.messages.length ?? 0;
 
   useEffect(() => {
-    // Only scroll when a new message is added (user sent or new assistant placeholder)
-    // Don't scroll on streaming content updates to existing messages
     if (messageCount > prevMessageCountRef.current) {
       scrollToBottom();
     }
@@ -34,6 +34,10 @@ export default function ChatArea() {
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     setShowScrollBtn(scrollHeight - scrollTop - clientHeight > 100);
   };
+
+  const councilDescription = isCouncil && state.activeChat
+    ? `${state.activeChat.councilModels?.join(", ")} - ${state.activeChat.councilStyle || "synthesis"}`
+    : null;
 
   return (
     <div className="flex-1 flex flex-col h-screen bg-[#212121]">
@@ -58,6 +62,20 @@ export default function ChatArea() {
         )}
       </div>
 
+      {/* Council status indicator */}
+      {state.councilStatus && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-green-900/20 border-b border-green-800/30">
+          <div className="w-4 h-4 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+          <span className="text-sm text-green-300 flex-1">{state.councilStatus}</span>
+          <button
+            onClick={cancelCouncil}
+            className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded border border-red-400/30 hover:border-red-400/60 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* Messages */}
       <div
         ref={containerRef}
@@ -76,12 +94,20 @@ export default function ChatArea() {
           </div>
         ) : state.activeChat.messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-16 h-16 rounded-full bg-emerald-600 flex items-center justify-center text-white text-2xl font-bold mb-4">
-              AI
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold mb-4 ${
+              isCouncil ? "bg-green-600" : "bg-emerald-600"
+            }`}>
+              {isCouncil ? (
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              ) : "AI"}
             </div>
-            <h2 className="text-xl text-white mb-2">How can I help you today?</h2>
+            <h2 className="text-xl text-white mb-2">
+              {isCouncil ? "Council Mode" : "How can I help you today?"}
+            </h2>
             <p className="text-gray-400 text-sm">
-              Using {state.activeChat.model}
+              {isCouncil && councilDescription ? councilDescription : `Using ${state.activeChat.model}`}
             </p>
           </div>
         ) : (

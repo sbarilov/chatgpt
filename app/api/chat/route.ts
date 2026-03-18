@@ -1,13 +1,14 @@
 import OpenAI from "openai";
 import fs from "fs";
 import path from "path";
+import { getClientForModel } from "@/lib/providers";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
     const { model, messages } = await req.json();
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const openai = getClientForModel(model);
 
     // Build messages with image support
     const apiMessages = messages.map((m: { role: string; content: string; images?: string[] }) => {

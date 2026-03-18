@@ -7,7 +7,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { model, systemPrompt } = await req.json();
-  const chat = createChat(model || "gpt-4.5-pro", systemPrompt || "");
+  const { model, systemPrompt, mode, councilModels, councilStyle, councilRounds } = await req.json();
+  const chat = createChat({
+    model: model || "gpt-4.5-pro",
+    systemPrompt: systemPrompt || "",
+    mode: mode || "single",
+    councilModels,
+    councilStyle,
+    councilRounds,
+  });
   return NextResponse.json(chat);
 }

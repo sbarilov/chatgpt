@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useReducer, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from "react";
 import type { Chat, ChatSummary, Message } from "./types";
 
 interface State {
@@ -8,6 +8,7 @@ interface State {
   activeChat: Chat | null;
   activeChatId: string | null;
   sidebarOpen: boolean;
+  councilStatus: string | null;
 }
 
 type Action =
@@ -16,6 +17,8 @@ type Action =
   | { type: "SET_ACTIVE_CHAT_ID"; id: string | null }
   | { type: "ADD_MESSAGE"; message: Message }
   | { type: "UPDATE_STREAMING_MESSAGE"; content: string }
+  | { type: "SET_COUNCIL_RESPONSES"; rounds: { round: number; responses: { model: string; content: string; error?: boolean }[] }[] }
+  | { type: "SET_COUNCIL_STATUS"; status: string | null }
   | { type: "TOGGLE_SIDEBAR" }
   | { type: "SET_SIDEBAR"; open: boolean }
   | { type: "UPDATE_CHAT_TITLE"; id: string; title: string }
@@ -47,6 +50,17 @@ function reducer(state: State, action: Action): State {
       }
       return { ...state, activeChat: { ...state.activeChat, messages: msgs } };
     }
+    case "SET_COUNCIL_RESPONSES": {
+      if (!state.activeChat) return state;
+      const msgs = [...state.activeChat.messages];
+      const last = msgs[msgs.length - 1];
+      if (last && last.role === "assistant") {
+        msgs[msgs.length - 1] = { ...last, councilResponses: action.rounds };
+      }
+      return { ...state, activeChat: { ...state.activeChat, messages: msgs } };
+    }
+    case "SET_COUNCIL_STATUS":
+      return { ...state, councilStatus: action.status };
     case "TOGGLE_SIDEBAR":
       return { ...state, sidebarOpen: !state.sidebarOpen };
     case "SET_SIDEBAR":
@@ -74,16 +88,26 @@ const initialState: State = {
   activeChat: null,
   activeChatId: null,
   sidebarOpen: true,
+  councilStatus: null,
 };
+
+interface CreateChatOptions {
+  model: string;
+  mode?: "single" | "council";
+  councilModels?: string[];
+  councilStyle?: "synthesis" | "roundtable";
+  councilRounds?: number;
+}
 
 interface ChatContextType {
   state: State;
   dispatch: React.Dispatch<Action>;
   loadChats: () => Promise<void>;
   loadChat: (id: string) => Promise<void>;
-  createNewChat: (model: string) => Promise<Chat>;
+  createNewChat: (modelOrOptions: string | CreateChatOptions) => Promise<Chat>;
   deleteChat: (id: string) => Promise<void>;
   sendMessage: (content: string, images?: string[]) => Promise<void>;
+  cancelCouncil: () => void;
   updateModel: (model: string) => Promise<void>;
   updateSystemPrompt: (prompt: string) => Promise<void>;
   generateTitle: (chatId: string, firstMessage: string) => Promise<void>;
@@ -93,6 +117,7 @@ const ChatContext = createContext<ChatContextType | null>(null);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const abortRef = useRef<AbortController | null>(null);
 
   const loadChats = useCallback(async () => {
     const res = await fetch("/api/chats");
@@ -108,11 +133,15 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const createNewChat = useCallback(async (model: string): Promise<Chat> => {
+  const createNewChat = useCallback(async (modelOrOptions: string | CreateChatOptions): Promise<Chat> => {
+    const opts: CreateChatOptions = typeof modelOrOptions === "string"
+      ? { model: modelOrOptions }
+      : modelOrOptions;
+
     const res = await fetch("/api/chats", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model }),
+      body: JSON.stringify(opts),
     });
     const chat = await res.json();
     dispatch({ type: "SET_ACTIVE_CHAT", chat });
@@ -128,17 +157,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     await loadChats();
   }, [state.activeChatId, loadChats]);
 
+  const cancelCouncil = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+  }, []);
+
   const sendMessage = useCallback(async (content: string, images?: string[]) => {
     if (!state.activeChat) return;
     const chatId = state.activeChat.id;
     const model = state.activeChat.model;
+    const isCouncil = state.activeChat.mode === "council";
     const isFirstMessage = state.activeChat.messages.filter(m => m.role === "user").length === 0;
 
-    // Save user message
+    // Save user message (no images for council mode)
     const res = await fetch(`/api/chats/${chatId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "user", content, images }),
+      body: JSON.stringify({ role: "user", content, images: isCouncil ? undefined : images }),
     });
     const userMsg = await res.json();
     dispatch({ type: "ADD_MESSAGE", message: userMsg });
@@ -160,58 +197,130 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
     for (const m of allMessages) {
       if (m.role === "system") continue;
-      if (m.images && m.images.length > 0) {
-        apiMessages.push({
-          role: m.role,
-          content: m.content,
-          images: m.images,
-        });
+      if (!isCouncil && m.images && m.images.length > 0) {
+        apiMessages.push({ role: m.role, content: m.content, images: m.images });
       } else {
         apiMessages.push({ role: m.role, content: m.content });
       }
     }
 
-    // Stream response
     let fullContent = "";
-    try {
-      const streamRes = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, messages: apiMessages }),
-      });
+    let councilResponses: { model: string; content: string }[] | undefined;
 
-      const reader = streamRes.body?.getReader();
-      const decoder = new TextDecoder();
+    if (isCouncil) {
+      // Council mode
+      const councilModels = state.activeChat.councilModels || [];
+      const councilStyle = state.activeChat.councilStyle || "synthesis";
+      const councilRounds = state.activeChat.councilRounds || 2;
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n");
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-              if (data === "[DONE]") break;
-              try {
-                const parsed = JSON.parse(data);
-                const token = parsed.choices?.[0]?.delta?.content;
-                if (token) {
-                  fullContent += token;
-                  dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        dispatch({ type: "SET_COUNCIL_STATUS", status: "Starting council..." });
+
+        const streamRes = await fetch("/api/council", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            models: councilModels,
+            messages: apiMessages,
+            councilStyle,
+            councilRounds,
+          }),
+          signal: controller.signal,
+        });
+
+        const reader = streamRes.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n");
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") break;
+                try {
+                  const parsed = JSON.parse(data);
+                  if (parsed.type === "status") {
+                    dispatch({ type: "SET_COUNCIL_STATUS", status: parsed.message });
+                  } else if (parsed.type === "council_responses") {
+                    councilResponses = parsed.rounds;
+                    dispatch({ type: "SET_COUNCIL_RESPONSES", rounds: parsed.rounds });
+                  } else if (parsed.choices?.[0]?.delta?.content) {
+                    fullContent += parsed.choices[0].delta.content;
+                    dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+                  }
+                } catch {
+                  // skip parse errors
                 }
-              } catch {
-                // skip parse errors
               }
             }
           }
         }
+      } catch (err: any) {
+        if (err.name === "AbortError") {
+          if (!fullContent) {
+            fullContent = "Council deliberation was cancelled.";
+            dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+          }
+        } else {
+          console.error("Council streaming error:", err);
+          if (!fullContent) {
+            fullContent = "Sorry, there was an error during council deliberation.";
+            dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+          }
+        }
+      } finally {
+        dispatch({ type: "SET_COUNCIL_STATUS", status: null });
+        abortRef.current = null;
       }
-    } catch (err) {
-      console.error("Streaming error:", err);
-      if (!fullContent) {
-        fullContent = "Sorry, there was an error generating a response.";
-        dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+    } else {
+      // Single model mode (unchanged)
+      try {
+        const streamRes = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ model, messages: apiMessages }),
+        });
+
+        const reader = streamRes.body?.getReader();
+        const decoder = new TextDecoder();
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split("\n");
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") break;
+                try {
+                  const parsed = JSON.parse(data);
+                  const token = parsed.choices?.[0]?.delta?.content;
+                  if (token) {
+                    fullContent += token;
+                    dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+                  }
+                } catch {
+                  // skip parse errors
+                }
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Streaming error:", err);
+        if (!fullContent) {
+          fullContent = "Sorry, there was an error generating a response.";
+          dispatch({ type: "UPDATE_STREAMING_MESSAGE", content: fullContent });
+        }
       }
     }
 
@@ -219,7 +328,12 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     await fetch(`/api/chats/${chatId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "assistant", content: fullContent }),
+      body: JSON.stringify({
+        role: "assistant",
+        content: fullContent,
+        model: isCouncil ? "council" : model,
+        councilResponses,
+      }),
     });
 
     // Generate title if first message
@@ -287,6 +401,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         createNewChat,
         deleteChat,
         sendMessage,
+        cancelCouncil,
         updateModel,
         updateSystemPrompt,
         generateTitle,

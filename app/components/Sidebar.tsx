@@ -66,7 +66,14 @@ export default function Sidebar() {
               }`}
             >
               <div className="flex-1 min-w-0">
-                <p className="text-sm truncate">{chat.title}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm truncate">{chat.title}</p>
+                  {chat.mode === "council" && (
+                    <span className="flex-shrink-0 text-[10px] font-medium text-green-400 bg-green-400/10 px-1.5 py-0.5 rounded">
+                      Council
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500 truncate">
                   {formatDistanceToNow(new Date(chat.updatedAt), { addSuffix: true })}
                 </p>

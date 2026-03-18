@@ -63,6 +63,7 @@ export default function ChatInput() {
   };
 
   const disabled = !state.activeChat;
+  const isCouncil = state.activeChat?.mode === "council";
 
   return (
     <div className="border-t border-gray-700 p-4">
@@ -74,7 +75,7 @@ export default function ChatInput() {
       <div className="flex items-end gap-2">
         <button
           onClick={() => fileInputRef.current?.click()}
-          disabled={disabled}
+          disabled={disabled || isCouncil}
           className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50"
           title="Upload image or PDF"
         >
