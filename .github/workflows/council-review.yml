@@ -1,15 +1,59 @@
 name: Council PR Review
 
 on:
+  # Trigger when a specific reviewer is requested
   pull_request:
-    types: [opened, synchronize]
+    types: [review_requested]
+
+  # Trigger via /council-review comment
+  issue_comment:
+    types: [created]
+
+env:
+  # The reviewer name that triggers the review (team or user)
+  # Change this to match your org's bot account or team slug
+  COUNCIL_REVIEWER: council-reviewer
 
 jobs:
   review:
-    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
+    # Run if:
+    # 1. A matching reviewer was requested on a non-draft PR, OR
+    # 2. Someone commented /council-review on a PR
+    if: >-
+      (
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.draft == false &&
+        (
+          github.event.requested_reviewer.login == 'council-reviewer' ||
+          github.event.requested_team.slug == 'council-reviewer'
+        )
+      ) ||
+      (
+        github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request &&
+        contains(github.event.comment.body, '/council-review')
+      )
+
     steps:
+      - name: Get PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: React to comment
+        if: github.event_name == 'issue_comment'
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=eyes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -23,8 +67,22 @@ jobs:
         run: npm ci
 
       - name: Run Council PR Review
-        run: npx tsx tools/pr-reviewer/cli.ts --repo ${{ github.repository }} --pr ${{ github.event.pull_request.number }} --post
+        run: |
+          npx tsx tools/pr-reviewer/cli.ts \
+            --repo ${{ github.repository }} \
+            --pr ${{ steps.pr.outputs.number }} \
+            --post
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+
+      - name: React to comment with completion
+        if: github.event_name == 'issue_comment' && success()
+        run: |
+          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
+            -f content=rocket
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
