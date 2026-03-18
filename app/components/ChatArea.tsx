@@ -8,7 +8,7 @@ import ModelSelector from "./ModelSelector";
 import SystemPromptEditor from "./SystemPromptEditor";
 
 export default function ChatArea() {
-  const { state, dispatch } = useChatContext();
+  const { state, dispatch, createNewChat } = useChatContext();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -50,8 +50,12 @@ export default function ChatArea() {
         <h1 className="text-white font-medium truncate flex-1">
           {state.activeChat?.title || "ChatGPT Clone"}
         </h1>
-        <SystemPromptEditor />
-        <ModelSelector />
+        {state.activeChat && (
+          <>
+            <SystemPromptEditor />
+            <ModelSelector />
+          </>
+        )}
       </div>
 
       {/* Messages */}
@@ -105,7 +109,13 @@ export default function ChatArea() {
       )}
 
       {/* Input */}
-      <ChatInput />
+      {state.activeChat ? (
+        <ChatInput />
+      ) : (
+        <div className="border-t border-gray-700 p-6 text-center text-gray-400">
+          Click <button onClick={() => createNewChat("gpt-4.5-pro")} className="text-white font-medium hover:underline">New Chat</button> to start chatting
+        </div>
+      )}
     </div>
   );
 }

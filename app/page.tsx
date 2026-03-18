@@ -12,7 +12,7 @@ export default function Home() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "N") {
         e.preventDefault();
-        createNewChat("gpt-4o");
+        createNewChat("gpt-4.5-pro");
       }
     };
     window.addEventListener("keydown", handleKeyDown);

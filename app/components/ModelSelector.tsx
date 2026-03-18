@@ -6,7 +6,7 @@ import { useChatContext } from "@/lib/context";
 export default function ModelSelector() {
   const { models, loading } = useModels();
   const { state, updateModel } = useChatContext();
-  const currentModel = state.activeChat?.model || "gpt-4o";
+  const currentModel = state.activeChat?.model || "gpt-4.5-pro";
 
   return (
     <select

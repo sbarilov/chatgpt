@@ -8,10 +8,10 @@ import { formatDistanceToNow } from "date-fns";
 export default function Sidebar() {
   const { state, dispatch, loadChat, createNewChat, deleteChat } = useChatContext();
   const { models } = useModels();
-  const [defaultModel] = useState("gpt-4o");
+  const [defaultModel] = useState("gpt-4.5-pro");
 
   const handleNewChat = async () => {
-    const model = models.length > 0 ? (models.includes("gpt-4o") ? "gpt-4o" : models[0]) : defaultModel;
+    const model = models.length > 0 ? (models.includes("gpt-4.5-pro") ? "gpt-4.5-pro" : models[0]) : defaultModel;
     await createNewChat(model);
     dispatch({ type: "SET_SIDEBAR", open: false });
   };
