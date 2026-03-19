@@ -37,6 +37,10 @@ yarn-error.log*
 # local data
 /data/
 
+# council review
+.council-review.json
+council-review-*.md
+
 # vercel
 .vercel
 

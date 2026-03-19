@@ -6,6 +6,7 @@ import {
   buildChunkedFileReviewPromptWithContext,
   buildSummaryCouncilPrompt,
 } from "./prompts";
+import { RoleConfig } from "./config";
 import { queryModel } from "@/lib/council-engine";
 import { runCouncilWithSynthesis } from "@/lib/council-engine";
 import { extractTicketKey, fetchJiraTicket, formatTicketContext } from "./jira";
@@ -43,6 +44,8 @@ interface ReviewOptions {
   style: "synthesis" | "roundtable" | "sequential";
   rounds: number;
   useRoles: boolean;
+  roleConfigs?: RoleConfig[];
+  systemInstructions?: string;
   onStatus?: (message: string) => void;
 }
 
@@ -55,6 +58,8 @@ interface LocalReviewOptions {
   style: "synthesis" | "roundtable" | "sequential";
   rounds: number;
   useRoles: boolean;
+  roleConfigs?: RoleConfig[];
+  systemInstructions?: string;
   onStatus?: (message: string) => void;
 }
 
@@ -149,9 +154,11 @@ async function reviewDiff(params: {
   style: "synthesis" | "roundtable" | "sequential";
   rounds: number;
   useRoles: boolean;
+  roleConfigs?: RoleConfig[];
+  systemInstructions?: string;
   onStatus?: (message: string) => void;
 }): Promise<ReviewResult> {
-  const { rawDiff, title, description, branch, models, style, rounds, useRoles, onStatus } = params;
+  const { rawDiff, title, description, branch, models, style, rounds, useRoles, roleConfigs, systemInstructions, onStatus } = params;
   const cost: CostTracker = { apiCalls: 0, models: new Set(models) };
 
   // Jira ticket context
@@ -200,7 +207,7 @@ async function reviewDiff(params: {
   }
 
   // Assign roles
-  const roles = useRoles ? assignRoles(models) : {};
+  const roles = useRoles ? assignRoles(models, roleConfigs) : {};
 
   // Chunk files
   const chunks = chunkFiles(reviewFiles);
@@ -218,8 +225,8 @@ async function reviewDiff(params: {
     const reviewPromises = models.map(async (model) => {
       const role = roles[model] || "General Code Reviewer";
       const messages = isSingleFile
-        ? buildFileReviewPromptWithContext(chunk[0], role, jiraContext)
-        : buildChunkedFileReviewPromptWithContext(chunk, role, jiraContext);
+        ? buildFileReviewPromptWithContext(chunk[0], role, jiraContext, systemInstructions)
+        : buildChunkedFileReviewPromptWithContext(chunk, role, jiraContext, systemInstructions);
 
       const result = await queryModel(model, messages);
       cost.apiCalls++;
@@ -299,7 +306,8 @@ async function reviewDiff(params: {
     description,
     commentsSummary,
     reviewFiles.length,
-    jiraContext
+    jiraContext,
+    systemInstructions
   );
 
   const councilResult = await runCouncilWithSynthesis({
@@ -343,7 +351,7 @@ async function reviewDiff(params: {
 }
 
 export async function reviewPR(options: ReviewOptions): Promise<ReviewResult> {
-  const { owner, repo, pr, models, style, rounds, useRoles, onStatus } = options;
+  const { owner, repo, pr, models, style, rounds, useRoles, roleConfigs, systemInstructions, onStatus } = options;
 
   onStatus?.("Fetching PR metadata and diff...");
   const [metadata, rawDiff] = await Promise.all([
@@ -360,6 +368,8 @@ export async function reviewPR(options: ReviewOptions): Promise<ReviewResult> {
     style,
     rounds,
     useRoles,
+    roleConfigs,
+    systemInstructions,
     onStatus,
   });
 

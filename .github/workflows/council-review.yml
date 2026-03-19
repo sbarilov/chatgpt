@@ -1,91 +1,43 @@
-# Drop this file into any repo at .github/workflows/council-review.yml
-# It triggers when someone comments /council-review on a PR
-# or when the 'council-reviewer' team/user is added as a reviewer.
-#
-# Required org-level or repo-level secrets:
-#   OPENAI_API_KEY
-# Optional secrets:
-#   JIRA_API_TOKEN, JIRA_BASE_URL, JIRA_USER_EMAIL
+# Drop this file into any repo to enable /council-review comments.
+# Only requires one secret: BUILDKITE_API_TOKEN
+# All other secrets (OpenAI, Jira, GitHub) are stored in Buildkite.
 
 name: Council PR Review
 
 on:
-  pull_request:
-    types: [review_requested]
   issue_comment:
     types: [created]
 
 jobs:
-  review:
+  trigger:
+    if: >-
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '/council-review')
     runs-on: ubuntu-latest
 
-    if: >-
-      (
-        github.event_name == 'pull_request' &&
-        github.event.pull_request.draft == false &&
-        (
-          github.event.requested_reviewer.login == 'council-reviewer' ||
-          github.event.requested_team.slug == 'council-reviewer'
-        )
-      ) ||
-      (
-        github.event_name == 'issue_comment' &&
-        github.event.issue.pull_request &&
-        contains(github.event.comment.body, '/council-review')
-      )
-
     steps:
-      - name: Get PR number
-        id: pr
-        run: |
-          if [ "${{ github.event_name }}" = "issue_comment" ]; then
-            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: React to comment
-        if: github.event_name == 'issue_comment'
         run: |
           gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
             -f content=eyes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout reviewer tool
-        uses: actions/checkout@v4
-        with:
-          repository: sbarilov/chatgpt
-          path: reviewer-tool
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: reviewer-tool/package-lock.json
-
-      - name: Install dependencies
-        run: cd reviewer-tool && npm ci
-
-      - name: Run Council PR Review
+      - name: Trigger Buildkite pipeline
         run: |
-          cd reviewer-tool
-          npx tsx tools/pr-reviewer/cli.ts \
-            --repo ${{ github.repository }} \
-            --pr ${{ steps.pr.outputs.number }} \
-            --post
+          curl -sS -X POST \
+            "https://api.buildkite.com/v2/organizations/${BUILDKITE_ORG}/pipelines/council-pr-review/builds" \
+            -H "Authorization: Bearer ${BUILDKITE_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"commit\": \"HEAD\",
+              \"branch\": \"main\",
+              \"message\": \"Review PR #${{ github.event.issue.number }} on ${{ github.repository }}\",
+              \"env\": {
+                \"REVIEW_REPO\": \"${{ github.repository }}\",
+                \"REVIEW_PR\": \"${{ github.event.issue.number }}\"
+              }
+            }"
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
-          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
-          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
-
-      - name: React to comment with completion
-        if: github.event_name == 'issue_comment' && success()
-        run: |
-          gh api repos/${{ github.repository }}/issues/comments/${{ github.event.comment.id }}/reactions \
-            -f content=rocket
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BUILDKITE_API_TOKEN: ${{ secrets.BUILDKITE_API_TOKEN }}
+          BUILDKITE_ORG: twilio

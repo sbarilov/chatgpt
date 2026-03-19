@@ -1,0 +1,25 @@
+# Council PR Review Pipeline
+# Triggered via API with env vars: REVIEW_REPO, REVIEW_PR
+#
+# Example trigger:
+#   curl -X POST "https://api.buildkite.com/v2/organizations/{org}/pipelines/council-pr-review/builds" \
+#     -H "Authorization: Bearer $BUILDKITE_API_TOKEN" \
+#     -d '{
+#       "commit": "HEAD",
+#       "branch": "main",
+#       "env": {
+#         "REVIEW_REPO": "twilio-internal/one-console",
+#         "REVIEW_PR": "8025"
+#       }
+#     }'
+
+steps:
+  - label: ":robot_face: Council PR Review"
+    command:
+      - npm ci
+      - npx tsx tools/pr-reviewer/cli.ts --repo "$REVIEW_REPO" --pr "$REVIEW_PR" --post
+    env:
+      NODE_ENV: production
+    timeout_in_minutes: 15
+    agents:
+      queue: default
