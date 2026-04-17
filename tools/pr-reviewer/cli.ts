@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import { execSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { reviewPR, reviewLocal } from "./reviewer";
 import { postReview, fetchPRMetadata } from "./github";
 import { loadConfig, loadEnvFile, resolveEnv } from "./config";
@@ -15,12 +15,15 @@ Usage:
   council-review <pr-number> [options]
   council-review --repo owner/repo --pr <number> [options]
   council-review --local [--base main] [options]
+  council-review --diff <file> [--title "..."] [options]
 
 Options:
   --repo <owner/repo>    GitHub repository (overrides config file)
   --pr <number>          Pull request number
   --local                Review local git diff instead of a GitHub PR
   --base <branch>        Base branch for local diff (default: main)
+  --diff <file>          Review a diff from a file (use - for stdin)
+  --title <title>        PR/diff title (used with --diff or --local)
   --config <path>        Path to config file (default: auto-detect .council-review.json)
   --models <m1,m2,...>   Models to use (overrides config file)
   --style <style>        Council style: sequential|roundtable|synthesis (overrides config)
@@ -139,6 +142,8 @@ async function main() {
       pr: { type: "string" },
       local: { type: "boolean", default: false },
       base: { type: "string" },
+      diff: { type: "string" },
+      title: { type: "string" },
       config: { type: "string" },
       models: { type: "string" },
       style: { type: "string" },
@@ -176,7 +181,45 @@ async function main() {
   }
 
   try {
-    if (values.local) {
+    if (values.diff) {
+      // Diff file mode
+      const rawDiff = values.diff === "-"
+        ? readFileSync("/dev/stdin", "utf8")
+        : readFileSync(values.diff, "utf8");
+
+      if (!rawDiff.trim()) {
+        console.error("Diff file is empty. Nothing to review.");
+        process.exit(0);
+      }
+
+      const title = values.title || "Diff review";
+      status(`Reviewing diff from ${values.diff === "-" ? "stdin" : values.diff} (${rawDiff.split("\n").length} lines)...`);
+
+      const { review, cost, roles } = await reviewLocal({
+        rawDiff,
+        title,
+        description: "",
+        branch: "unknown",
+        models,
+        style,
+        rounds,
+        useRoles,
+        roleConfigs,
+        systemInstructions,
+        onStatus: status,
+      });
+
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      const output = formatReview(title, review, cost, roles, models, style, elapsed);
+      console.log(output);
+
+      if (values.report) {
+        const reportPath = values["report-path"] || `council-review-diff.md`;
+        const md = formatMarkdownReport(title, review, cost, roles, models, style, elapsed);
+        writeFileSync(reportPath, md);
+        console.log(`\nReport saved to ${reportPath}`);
+      }
+    } else if (values.local) {
       // Local mode
       const base = values.base || "main";
       status(`Generating diff against ${base}...`);

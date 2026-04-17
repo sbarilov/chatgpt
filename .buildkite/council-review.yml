@@ -17,7 +17,7 @@ steps:
   - label: ":robot_face: Council PR Review"
     command:
       - npm ci
-      - npx tsx tools/pr-reviewer/cli.ts --repo "$REVIEW_REPO" --pr "$REVIEW_PR" --post
+      - npx tsx tools/pr-reviewer/cli.ts --repo "$REVIEW_REPO" --pr "$REVIEW_PR" --comment
     env:
       NODE_ENV: production
     timeout_in_minutes: 15

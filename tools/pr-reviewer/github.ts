@@ -2,9 +2,18 @@ import { PRMetadata, PRReview } from "./types";
 
 const API_BASE = "https://api.github.com";
 
+function getToken(): string {
+  if (process.env.GITHUB_TOKEN) return process.env.GITHUB_TOKEN;
+  try {
+    const { execSync } = require("node:child_process");
+    const token = execSync("gh auth token", { encoding: "utf8" }).trim();
+    if (token) return token;
+  } catch {}
+  throw new Error("GITHUB_TOKEN environment variable is required (or authenticate via `gh auth login`)");
+}
+
 function getHeaders(): Record<string, string> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) throw new Error("GITHUB_TOKEN environment variable is required");
+  const token = getToken();
   return {
     Authorization: `Bearer ${token}`,
     Accept: "application/vnd.github+json",

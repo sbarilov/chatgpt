@@ -16,8 +16,28 @@ export async function GET() {
     const list = await openai.models.list();
     const models = list.data
       .map((m) => m.id)
-      .filter((id) => id.startsWith("gpt-") || id.startsWith("o") || id.startsWith("chatgpt-"))
-      .filter((id) => !id.includes("instruct") && !id.includes("realtime") && !id.includes("audio") && !id.includes("transcribe") && !id.includes("tts") && !id.includes("dall-e") && !id.includes("whisper") && !id.includes("embedding") && !id.includes("gpt-5-pro") && id !== "o3-pro")
+      .filter((id) => id.startsWith("gpt-") || id.startsWith("o1") || id.startsWith("o3") || id.startsWith("o4"))
+      .filter((id) =>
+        !id.includes("instruct") &&
+        !id.includes("realtime") &&
+        !id.includes("audio") &&
+        !id.includes("transcribe") &&
+        !id.includes("tts") &&
+        !id.includes("dall-e") &&
+        !id.includes("whisper") &&
+        !id.includes("embedding") &&
+        !id.includes("image") &&
+        !id.includes("codex") &&
+        !id.includes("moderation") &&
+        !id.includes("deep-research") &&
+        !id.includes("search") &&
+        !id.includes("chat-latest") &&
+        !id.match(/-\d{4}-\d{2}-\d{2}$/) &&
+        !id.match(/-\d{4}$/) &&
+        !id.includes("preview") &&
+        !id.includes("3.5-turbo-16k") &&
+        id !== "o3-pro"
+      )
       .sort();
 
     // Append Gemini models if API key is configured
@@ -29,7 +49,7 @@ export async function GET() {
     return NextResponse.json(models);
   } catch (error) {
     console.error("Error fetching models:", error);
-    const fallback = ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"];
+    const fallback = ["gpt-5.4", "gpt-5.4-mini", "gpt-4o", "gpt-4o-mini"];
     if (process.env.GEMINI_API_KEY) {
       fallback.push(...GEMINI_MODELS);
     }
