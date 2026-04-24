@@ -279,15 +279,21 @@ async function reviewDiff(params: {
     }
   }
 
+  // Filter low-signal findings: drop single-model nitpicks and medium-confidence suggestions from single model
+  const filtered = allComments.filter((c) => {
+    if (c.severity === "nitpick" && c.modelSource.length === 1) return false;
+    return true;
+  });
+
   // Prioritize and cap
   const severityOrder = ["critical", "warning", "suggestion", "nitpick"];
-  allComments.sort((a, b) => {
+  filtered.sort((a, b) => {
     const diff = severityOrder.indexOf(a.severity) - severityOrder.indexOf(b.severity);
     if (diff !== 0) return diff;
     return b.modelSource.length - a.modelSource.length;
   });
 
-  const cappedComments = allComments.slice(0, MAX_INLINE_COMMENTS);
+  const cappedComments = filtered.slice(0, MAX_INLINE_COMMENTS);
 
   // Phase B: Summary via council deliberation
   onStatus?.("Running council deliberation for PR summary...");

@@ -49,23 +49,35 @@ function buildSystemPrompt(role: string, systemInstructions?: string, jiraContex
 
 Review the provided diff and find issues. Return ONLY a JSON array of findings. Each finding must include a "snippet" field with the exact code from the diff (not a line number). If there are no issues, return an empty array [].
 
+QUALITY OVER QUANTITY: Only report findings you are confident about based on what you can see in the diff. Do NOT speculate about code you cannot see. A review with 2 high-confidence findings is far better than 10 speculative ones.
+
 Response format:
 [{
   "snippet": "exact code snippet from the diff",
   "severity": "critical" | "warning" | "suggestion" | "nitpick",
+  "confidence": "high" | "medium",
   "category": "short category label",
   "body": "description of the issue and how to fix it"
 }]
 
+Severity guide:
+- "critical": Will cause bugs, crashes, data loss, security vulnerabilities, or clearly violates stated requirements. Must be fixed before merge.
+- "warning": Likely to cause problems — incorrect behavior, missing error handling, test gaps for changed behavior, API contract violations. Should be fixed.
+- "suggestion": Would improve the code but is not blocking — better patterns, clearer naming, minor test improvements.
+- "nitpick": Style, formatting, trivially minor. Only include if genuinely useful and clearly label as nitpick.
+
 Rules:
 - Only comment on code that appears in the diff (added or modified lines)
 - The "snippet" must be an exact substring of a line in the diff
-- Be specific and actionable
+- Be specific and actionable — say what is wrong and how to fix it
 - Do not flag trivially correct code
-- Prioritize important issues over style nitpicks`;
+- Do NOT speculate about what other code outside the diff might do — only flag what you can prove from the diff
+- Do NOT flag generic concerns like "verify this works" or "ensure this is tested" unless you can point to a specific gap
+- Prefer fewer, higher-quality findings over many low-confidence ones
+- If you find nothing significant, return an empty array []`;
 
   if (jiraContext) {
-    prompt += `\n\nContext from the Jira ticket for this PR:\n${jiraContext}\n\nUse this context to understand what the code is trying to achieve. Flag if the implementation doesn't match the requirements.`;
+    prompt += `\n\nContext from the Jira ticket for this PR:\n${jiraContext}\n\nUse this context to check if the implementation matches the requirements. Flag SPECIFIC mismatches between the diff and the acceptance criteria — do not flag vague alignment concerns.`;
   }
 
   return prompt;
@@ -82,24 +94,36 @@ function buildChunkedSystemPrompt(role: string, systemInstructions?: string, jir
 
 Review the provided diffs and find issues. Return ONLY a JSON array of findings. Each finding must include a "file" field and a "snippet" field with the exact code from the diff (not a line number). If there are no issues, return an empty array [].
 
+QUALITY OVER QUANTITY: Only report findings you are confident about based on what you can see in the diff. Do NOT speculate about code you cannot see. A review with 2 high-confidence findings is far better than 10 speculative ones.
+
 Response format:
 [{
   "file": "path/to/file.ts",
   "snippet": "exact code snippet from the diff",
   "severity": "critical" | "warning" | "suggestion" | "nitpick",
+  "confidence": "high" | "medium",
   "category": "short category label",
   "body": "description of the issue and how to fix it"
 }]
 
+Severity guide:
+- "critical": Will cause bugs, crashes, data loss, security vulnerabilities, or clearly violates stated requirements. Must be fixed before merge.
+- "warning": Likely to cause problems — incorrect behavior, missing error handling, test gaps for changed behavior, API contract violations. Should be fixed.
+- "suggestion": Would improve the code but is not blocking — better patterns, clearer naming, minor test improvements.
+- "nitpick": Style, formatting, trivially minor. Only include if genuinely useful and clearly label as nitpick.
+
 Rules:
 - Only comment on code that appears in the diff (added or modified lines)
 - The "snippet" must be an exact substring of a line in the diff
-- Be specific and actionable
+- Be specific and actionable — say what is wrong and how to fix it
 - Do not flag trivially correct code
-- Prioritize important issues over style nitpicks`;
+- Do NOT speculate about what other code outside the diff might do — only flag what you can prove from the diff
+- Do NOT flag generic concerns like "verify this works" or "ensure this is tested" unless you can point to a specific gap
+- Prefer fewer, higher-quality findings over many low-confidence ones
+- If you find nothing significant, return an empty array []`;
 
   if (jiraContext) {
-    prompt += `\n\nContext from the Jira ticket for this PR:\n${jiraContext}\n\nUse this context to understand what the code is trying to achieve. Flag if the implementation doesn't match the requirements.`;
+    prompt += `\n\nContext from the Jira ticket for this PR:\n${jiraContext}\n\nUse this context to check if the implementation matches the requirements. Flag SPECIFIC mismatches between the diff and the acceptance criteria — do not flag vague alignment concerns.`;
   }
 
   return prompt;

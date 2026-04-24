@@ -57,6 +57,7 @@ export interface PRReview {
 export interface ModelFinding {
   snippet: string;
   severity: "critical" | "warning" | "suggestion" | "nitpick";
+  confidence?: "high" | "medium";
   category: string;
   body: string;
 }
